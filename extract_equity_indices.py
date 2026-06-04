@@ -3,8 +3,11 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import yfinance as yf
 import warnings
+import logging
 
 warnings.filterwarnings('ignore')
+# Suppress yfinance logging
+logging.getLogger('yfinance').setLevel(logging.ERROR)
 
 
 class EquityIndicesExtractor:
@@ -15,11 +18,10 @@ class EquityIndicesExtractor:
     """
     
     # Define indices by region with market and ticker information
+    # Using most reliable yfinance tickers
     INDICES_CONFIG = {
         'Asia': [
-            {'market': 'China', 'index_name': 'Shanghai Composite', 'ticker': '000001.SS', 'alternatives': ['SH000001.SS']},
-            {'market': 'China', 'index_name': 'Shenzhen Component', 'ticker': '399001.SZ', 'alternatives': ['SZ399001.SZ']},
-            {'market': 'Hong Kong', 'index_name': 'Hang Seng Index', 'ticker': '^HSI', 'alternatives': []},
+            {'market': 'Hong Kong', 'index_name': 'Hang Seng Index', 'ticker': '0001.HK', 'alternatives': ['^HSI']},
             {'market': 'Japan', 'index_name': 'Nikkei 225', 'ticker': '^N225', 'alternatives': []},
             {'market': 'Singapore', 'index_name': 'Straits Times Index', 'ticker': '^STI', 'alternatives': []},
             {'market': 'South Korea', 'index_name': 'KOSPI', 'ticker': '^KS11', 'alternatives': []},
@@ -40,7 +42,7 @@ class EquityIndicesExtractor:
             {'market': 'UK', 'index_name': 'FTSE 100', 'ticker': '^FTSE', 'alternatives': []},
             {'market': 'Germany', 'index_name': 'DAX', 'ticker': '^GDAXI', 'alternatives': []},
             {'market': 'France', 'index_name': 'CAC 40', 'ticker': '^FCHI', 'alternatives': []},
-            {'market': 'Spain', 'index_name': 'IBEX 35', 'ticker': '^IBEX', 'alternatives': ['IBEX.MC']},
+            {'market': 'Spain', 'index_name': 'IBEX 35', 'ticker': '^IBEX', 'alternatives': []},
             {'market': 'Italy', 'index_name': 'FTSE MIB', 'ticker': 'FTSEMIB.MI', 'alternatives': []},
             {'market': 'Netherlands', 'index_name': 'AEX', 'ticker': '^AEX', 'alternatives': []},
             {'market': 'Switzerland', 'index_name': 'SMI', 'ticker': '^SSMI', 'alternatives': []},
@@ -68,7 +70,8 @@ class EquityIndicesExtractor:
     
     def extract_for_date_range(self, start_date: str, end_date: str, 
                                regions: Optional[List[str]] = None,
-                               use_alternatives: bool = True) -> pd.DataFrame:
+                               use_alternatives: bool = True,
+                               verbose: bool = False) -> pd.DataFrame:
         """
         Extract equity indices close prices for a date range.
         Each date becomes a column, with close prices as values.
@@ -79,6 +82,7 @@ class EquityIndicesExtractor:
             end_date: End date in 'YYYY-MM-DD' or 'DD-MMM-YYYY' format
             regions: List of regions to extract (None = all regions)
             use_alternatives: If True, try alternative tickers if primary fails
+            verbose: If True, show verbose output including error messages
             
         Returns:
             DataFrame with equity indices sorted by region
@@ -95,7 +99,8 @@ class EquityIndicesExtractor:
         print(f"{'='*70}")
         print(f"Start date: {start_formatted}")
         print(f"End date: {end_formatted}")
-        print(f"Use alternatives for failed tickers: {use_alternatives}\n")
+        print(f"Use alternatives for failed tickers: {use_alternatives}")
+        print(f"Verbose mode: {verbose}\n")
         
         # Generate all dates in range
         all_dates = self._generate_date_range(start_obj, end_obj)
@@ -130,12 +135,12 @@ class EquityIndicesExtractor:
                 alternatives = index_config.get('alternatives', [])
                 
                 # Fetch all historical data for this ticker
-                all_prices = self._fetch_prices_for_range(ticker, start_formatted, end_formatted)
+                all_prices = self._fetch_prices_for_range(ticker, start_formatted, end_formatted, verbose)
                 
                 # If primary failed and alternatives available, try alternatives
                 if not all_prices and use_alternatives and alternatives:
                     for alt_ticker in alternatives:
-                        all_prices = self._fetch_prices_for_range(alt_ticker, start_formatted, end_formatted)
+                        all_prices = self._fetch_prices_for_range(alt_ticker, start_formatted, end_formatted, verbose)
                         if all_prices:
                             ticker = alt_ticker
                             break
@@ -159,8 +164,8 @@ class EquityIndicesExtractor:
                             row_data[date_col_name] = round(all_prices[date_str], 2)
                             self.trading_days.add(date_str)
                         else:
-                            # Check if this is a trading day by checking if any other index has data
-                            row_data[date_col_name] = None  # Will fill in after detecting trading days
+                            # Leave blank for non-trading days
+                            row_data[date_col_name] = None
                     
                     self.extracted_data.append(row_data)
                     status = f"  ✓ {index_name}"
@@ -228,7 +233,7 @@ class EquityIndicesExtractor:
         raise ValueError(f"Date format not recognized: {date_str}. "
                         f"Use formats like: 2026-06-04 or 04-Jun-2026")
     
-    def _fetch_prices_for_range(self, ticker: str, start_date: str, end_date: str) -> Dict[str, float]:
+    def _fetch_prices_for_range(self, ticker: str, start_date: str, end_date: str, verbose: bool = False) -> Dict[str, float]:
         """
         Fetch close prices for a ticker across a date range.
         
@@ -236,6 +241,7 @@ class EquityIndicesExtractor:
             ticker: Stock ticker symbol
             start_date: Start date in 'YYYY-MM-DD' format
             end_date: End date in 'YYYY-MM-DD' format
+            verbose: If True, show error messages
             
         Returns:
             Dictionary mapping date strings to close prices
@@ -258,6 +264,8 @@ class EquityIndicesExtractor:
             return prices
         
         except Exception as e:
+            if verbose:
+                print(f"    Error fetching {ticker}: {str(e)}")
             return {}
     
     def save_to_excel(self, df: pd.DataFrame, output_file: str):
@@ -355,7 +363,7 @@ if __name__ == "__main__":
     start_date = '01-Jan-2026'
     end_date = '06-Jun-2026'
     
-    df = extractor.extract_for_date_range(start_date, end_date, use_alternatives=True)
+    df = extractor.extract_for_date_range(start_date, end_date, use_alternatives=True, verbose=False)
     
     if not df.empty:
         print("EXTRACTED EQUITY INDICES DATA:")
@@ -367,7 +375,7 @@ if __name__ == "__main__":
         extractor.save_to_excel(df, f'equity_indices_{start_date.replace("-", "")}_{end_date.replace("-", "")}.xlsx')
         extractor.save_to_csv(df, f'equity_indices_{start_date.replace("-", "")}_{end_date.replace("-", "")}.csv')
     else:
-        print("⚠ No data extracted.")
+        print("⚠ No data extracted. Check ticker symbols or try with verbose=True for details.")
     
     # ============================================================
     # Extract for specific regions only
@@ -380,7 +388,8 @@ if __name__ == "__main__":
         start_date,
         end_date,
         regions=['Asia', 'Europe'],
-        use_alternatives=True
+        use_alternatives=True,
+        verbose=False
     )
     
     if not df_filtered.empty:
