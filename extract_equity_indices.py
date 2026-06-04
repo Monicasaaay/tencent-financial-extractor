@@ -73,7 +73,7 @@ class EquityIndicesExtractor:
         
         try:
             print(f"1. Attempting yfinance.download()...")
-            data = yf.download(ticker, start=start_date, end=end_date, progress=False, quiet=False)
+            data = yf.download(ticker, start=start_date, end=end_date, progress=False)
             
             if data.empty:
                 print(f"   ✗ Result: Empty DataFrame")
@@ -93,7 +93,7 @@ class EquityIndicesExtractor:
         print(f"\n2. Trying with different date range (wider window)...")
         try:
             wider_start = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=5)).strftime('%Y-%m-%d')
-            data = yf.download(ticker, start=wider_start, end=end_date, progress=False, quiet=False)
+            data = yf.download(ticker, start=wider_start, end=end_date, progress=False)
             
             if not data.empty:
                 print(f"   ✓ Got data with wider range! Last 5 rows:")
@@ -234,8 +234,8 @@ class EquityIndicesExtractor:
             start = (date_obj - timedelta(days=window_days)).strftime('%Y-%m-%d')
             end = (date_obj + timedelta(days=window_days)).strftime('%Y-%m-%d')
             
-            # Download data
-            data = yf.download(ticker, start=start, end=end, progress=False, quiet=True)
+            # Download data - REMOVED 'quiet' parameter
+            data = yf.download(ticker, start=start, end=end, progress=False)
             
             if data.empty:
                 return None
@@ -262,7 +262,8 @@ class EquityIndicesExtractor:
     def _fetch_close_price(self, ticker: str, date_str: str) -> Optional[float]:
         """Fetch close price for a specific ticker on a specific date."""
         try:
-            data = yf.download(ticker, start=date_str, end=date_str, progress=False, quiet=True)
+            # REMOVED 'quiet' parameter
+            data = yf.download(ticker, start=date_str, end=date_str, progress=False)
             
             if not data.empty and 'Close' in data.columns:
                 return float(data['Close'].iloc[-1])
