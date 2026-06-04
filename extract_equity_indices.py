@@ -9,12 +9,12 @@ warnings.filterwarnings('ignore')
 
 class EquityIndicesExtractor:
     """
-    Extract equity indices close prices for a specific date and sort by region.
-    Designed to be dynamic and flexible for any date.
+    Extract equity indices close prices for a date range and sort by region.
+    Each date becomes a column with close prices.
+    Automatically detects trading days vs non-trading days.
     """
     
     # Define indices by region with market and ticker information
-    # NOTE: Some tickers may not have data on yfinance; alternatives are provided
     INDICES_CONFIG = {
         'Asia': [
             {'market': 'China', 'index_name': 'Shanghai Composite', 'ticker': '000001.SS', 'alternatives': ['SH000001.SS']},
@@ -63,81 +63,51 @@ class EquityIndicesExtractor:
         """Initialize the extractor."""
         self.extracted_data = []
         self.failed_tickers = []
-        self.actual_date_used = None
+        self.trading_days = set()
+        self.non_trading_days = set()
     
-    def diagnose_ticker(self, ticker: str, start_date: str, end_date: str):
-        """Diagnose why a ticker is failing."""
-        print(f"\n{'='*70}")
-        print(f"DIAGNOSTIC REPORT FOR TICKER: {ticker}")
-        print(f"{'='*70}")
-        print(f"Request date range: {start_date} to {end_date}\n")
-        
-        try:
-            print(f"1. Attempting yfinance.download()...")
-            data = yf.download(ticker, start=start_date, end=end_date, progress=False)
-            
-            if data.empty:
-                print(f"   ✗ Result: Empty DataFrame")
-                print(f"   Possible reasons:")
-                print(f"     - Ticker symbol may be incorrect")
-                print(f"     - No trading data for this date")
-                print(f"     - Ticker may be delisted")
-            else:
-                print(f"   ✓ Success! Got {len(data)} rows")
-                print(f"   Columns: {list(data.columns)}")
-                print(f"   Data preview:")
-                print(data)
-                print(f"\n   Close values: {data['Close'].values if 'Close' in data.columns else 'N/A'}")
-        
-        except Exception as e:
-            print(f"   ✗ Exception: {type(e).__name__}")
-            print(f"   Error message: {str(e)}")
-        
-        print(f"\n2. Trying with wider date range...")
-        try:
-            wider_start = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=10)).strftime('%Y-%m-%d')
-            data = yf.download(ticker, start=wider_start, end=end_date, progress=False)
-            
-            if not data.empty:
-                print(f"   ✓ Got data with wider range! Last 10 rows:")
-                print(data.tail(10))
-            else:
-                print(f"   ✗ Still no data with wider range")
-        except Exception as e:
-            print(f"   ✗ Exception: {str(e)}")
-        
-        print(f"\n{'='*70}\n")
-    
-    def extract_for_date(self, date_str: str, regions: Optional[List[str]] = None, 
-                        use_alternatives: bool = True) -> pd.DataFrame:
+    def extract_for_date_range(self, start_date: str, end_date: str, 
+                               regions: Optional[List[str]] = None,
+                               use_alternatives: bool = True) -> pd.DataFrame:
         """
-        Extract equity indices close prices for a specific date.
+        Extract equity indices close prices for a date range.
+        Each date becomes a column, with close prices as values.
+        Automatically detects trading days.
         
         Args:
-            date_str: Target date in 'YYYY-MM-DD' or 'DD-MMM-YYYY' format
+            start_date: Start date in 'YYYY-MM-DD' or 'DD-MMM-YYYY' format
+            end_date: End date in 'YYYY-MM-DD' or 'DD-MMM-YYYY' format
             regions: List of regions to extract (None = all regions)
             use_alternatives: If True, try alternative tickers if primary fails
             
         Returns:
             DataFrame with equity indices sorted by region
         """
-        # Normalize date format
-        date_obj = self._parse_date(date_str)
-        date_formatted = date_obj.strftime('%Y-%m-%d')
-        date_column_name = date_obj.strftime('%d%b%Y')  # e.g., '04Jun2026'
+        # Parse dates
+        start_obj = self._parse_date(start_date)
+        end_obj = self._parse_date(end_date)
+        
+        start_formatted = start_obj.strftime('%Y-%m-%d')
+        end_formatted = end_obj.strftime('%Y-%m-%d')
         
         print(f"\n{'='*70}")
-        print(f"EQUITY INDICES EXTRACTION")
+        print(f"EQUITY INDICES EXTRACTION - DATE RANGE")
         print(f"{'='*70}")
-        print(f"Target date: {date_formatted}")
-        print(f"Column name: {date_column_name}")
+        print(f"Start date: {start_formatted}")
+        print(f"End date: {end_formatted}")
         print(f"Use alternatives for failed tickers: {use_alternatives}\n")
+        
+        # Generate all dates in range
+        all_dates = self._generate_date_range(start_obj, end_obj)
+        print(f"Total dates in range: {len(all_dates)}\n")
         
         # Determine which regions to process
         regions_to_process = regions if regions else list(self.INDICES_CONFIG.keys())
         
         self.extracted_data = []
         self.failed_tickers = []
+        self.trading_days = set()
+        self.non_trading_days = set()
         
         total_indices = sum(
             len(self.INDICES_CONFIG[region]) 
@@ -145,7 +115,7 @@ class EquityIndicesExtractor:
             if region in self.INDICES_CONFIG
         )
         
-        # Extract data for each region
+        # Extract data for each region and index
         for region in regions_to_process:
             if region not in self.INDICES_CONFIG:
                 print(f"⚠ Warning: Region '{region}' not found. Skipping.")
@@ -159,56 +129,84 @@ class EquityIndicesExtractor:
                 index_name = index_config['index_name']
                 alternatives = index_config.get('alternatives', [])
                 
-                # Try to fetch with primary ticker
-                close_price = self._fetch_close_price_with_window(ticker, date_formatted)
-                used_ticker = ticker
+                # Fetch all historical data for this ticker
+                all_prices = self._fetch_prices_for_range(ticker, start_formatted, end_formatted)
                 
                 # If primary failed and alternatives available, try alternatives
-                if close_price is None and use_alternatives and alternatives:
+                if not all_prices and use_alternatives and alternatives:
                     for alt_ticker in alternatives:
-                        close_price = self._fetch_close_price_with_window(alt_ticker, date_formatted)
-                        if close_price is not None:
-                            used_ticker = alt_ticker
+                        all_prices = self._fetch_prices_for_range(alt_ticker, start_formatted, end_formatted)
+                        if all_prices:
+                            ticker = alt_ticker
                             break
                 
-                if close_price is not None:
-                    self.extracted_data.append({
+                if all_prices:
+                    # Build row with all dates
+                    row_data = {
                         'Region': region,
                         'Market': market,
                         'Index Name': index_name,
-                        'Ticker': used_ticker,
-                        date_column_name: round(close_price, 2)
-                    })
-                    status = f"  ✓ {index_name}: {close_price:.2f} ({used_ticker})"
+                        'Ticker': ticker,
+                    }
+                    
+                    # Add price for each date
+                    for date_obj in all_dates:
+                        date_str = date_obj.strftime('%Y-%m-%d')
+                        date_col_name = date_obj.strftime('%d%b%Y')  # e.g., '01Jan2026'
+                        
+                        if date_str in all_prices:
+                            # Trading day with data
+                            row_data[date_col_name] = round(all_prices[date_str], 2)
+                            self.trading_days.add(date_str)
+                        else:
+                            # Check if this is a trading day by checking if any other index has data
+                            row_data[date_col_name] = None  # Will fill in after detecting trading days
+                    
+                    self.extracted_data.append(row_data)
+                    status = f"  ✓ {index_name}"
                 else:
                     self.failed_tickers.append(ticker)
                     status = f"  ✗ {index_name} ({ticker})"
                 
                 print(status)
         
-        # Create DataFrame and sort by region and market
+        # Create DataFrame
         if self.extracted_data:
             df = pd.DataFrame(self.extracted_data)
+            
+            # Detect trading days by checking which dates have any non-null values
+            date_columns = [col for col in df.columns if len(col) == 8 and col[2:3] not in ['g', 'a', 'k']]
+            
+            print(f"\n📅 Detecting trading days...")
+            trading_days_detected = set()
+            non_trading_days_detected = set()
+            
+            for col in date_columns:
+                if df[col].notna().any():
+                    trading_days_detected.add(col)
+                else:
+                    non_trading_days_detected.add(col)
+            
+            print(f"Trading days detected: {len(trading_days_detected)}")
+            print(f"Non-trading days (blank): {len(non_trading_days_detected)}")
+            
+            # Sort by region, market, and index name
             df = df.sort_values(['Region', 'Market', 'Index Name']).reset_index(drop=True)
-            self.actual_date_used = date_formatted
         else:
             df = pd.DataFrame()
         
-        # Print summary
-        print(f"\n{'='*70}")
-        print(f"EXTRACTION SUMMARY")
-        print(f"{'='*70}")
-        print(f"Date: {date_formatted}")
-        print(f"Total indices attempted: {total_indices}")
-        print(f"Successfully extracted: {len(self.extracted_data)}")
-        print(f"Failed: {len(self.failed_tickers)}")
-        
-        if self.failed_tickers:
-            print(f"\nFailed tickers: {', '.join(self.failed_tickers)}")
-        
-        print(f"{'='*70}\n")
+        print()
         
         return df
+    
+    def _generate_date_range(self, start_obj: datetime, end_obj: datetime) -> List[datetime]:
+        """Generate list of all dates between start and end (inclusive)."""
+        dates = []
+        current = start_obj
+        while current <= end_obj:
+            dates.append(current)
+            current += timedelta(days=1)
+        return dates
     
     def _parse_date(self, date_str: str) -> datetime:
         """Parse date string in multiple formats."""
@@ -230,73 +228,37 @@ class EquityIndicesExtractor:
         raise ValueError(f"Date format not recognized: {date_str}. "
                         f"Use formats like: 2026-06-04 or 04-Jun-2026")
     
-    def _fetch_close_price_with_window(self, ticker: str, date_str: str, window_days: int = 7) -> Optional[float]:
+    def _fetch_prices_for_range(self, ticker: str, start_date: str, end_date: str) -> Dict[str, float]:
         """
-        Fetch close price for a specific ticker on a specific date.
-        Uses a window to handle weekend/holiday closures.
+        Fetch close prices for a ticker across a date range.
         
         Args:
             ticker: Stock ticker symbol
-            date_str: Date in 'YYYY-MM-DD' format
-            window_days: Number of days to look back/forward
+            start_date: Start date in 'YYYY-MM-DD' format
+            end_date: End date in 'YYYY-MM-DD' format
             
         Returns:
-            Close price as float, or None if not available
+            Dictionary mapping date strings to close prices
         """
         try:
-            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            # Download data for the range
+            data = yf.download(ticker, start=start_date, end=end_date, progress=False)
             
-            # Create a window around the target date
-            start = (date_obj - timedelta(days=window_days)).strftime('%Y-%m-%d')
-            end = (date_obj + timedelta(days=window_days)).strftime('%Y-%m-%d')
+            if data.empty or 'Close' not in data.columns:
+                return {}
             
-            # Download data
-            data = yf.download(ticker, start=start, end=end, progress=False)
-            
-            if data.empty:
-                return None
-            
-            # Check if 'Close' column exists
-            if 'Close' not in data.columns:
-                return None
-            
-            # Try to get the exact date first
-            if date_str in data.index.astype(str):
-                close_val = data.loc[date_str, 'Close']
-                # Check if it's a valid number (not NaN)
+            # Convert to dictionary: date -> close price
+            prices = {}
+            for date, row in data.iterrows():
+                close_val = row['Close']
                 if pd.notna(close_val):
-                    return float(close_val)
+                    date_str = date.strftime('%Y-%m-%d')
+                    prices[date_str] = float(close_val)
             
-            # If exact date not available, get the closest trading date before the target
-            data_before = data[data.index <= pd.Timestamp(date_str)]
-            if not data_before.empty:
-                close_val = data_before.iloc[-1]['Close']
-                if pd.notna(close_val):
-                    return float(close_val)
-            
-            # If no data before, get the closest after
-            data_after = data[data.index >= pd.Timestamp(date_str)]
-            if not data_after.empty:
-                close_val = data_after.iloc[0]['Close']
-                if pd.notna(close_val):
-                    return float(close_val)
-            
-            return None
+            return prices
         
         except Exception as e:
-            return None
-    
-    def _fetch_close_price(self, ticker: str, date_str: str) -> Optional[float]:
-        """Fetch close price for a specific ticker on a specific date."""
-        try:
-            data = yf.download(ticker, start=date_str, end=date_str, progress=False)
-            
-            if not data.empty and 'Close' in data.columns:
-                return float(data['Close'].iloc[-1])
-            return None
-        
-        except Exception as e:
-            return None
+            return {}
     
     def save_to_excel(self, df: pd.DataFrame, output_file: str):
         """Save extracted data to Excel file with formatting."""
@@ -310,7 +272,7 @@ class EquityIndicesExtractor:
                 
                 # Define formatting
                 header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-                header_font = Font(bold=True, color="FFFFFF", size=12)
+                header_font = Font(bold=True, color="FFFFFF", size=11)
                 thin_border = Border(
                     left=Side(style='thin'),
                     right=Side(style='thin'),
@@ -333,9 +295,9 @@ class EquityIndicesExtractor:
                         cell.border = thin_border
                         cell.fill = row_fill
                         
-                        if col_idx <= 4:
+                        if col_idx <= 4:  # Region, Market, Index Name, Ticker
                             cell.alignment = Alignment(horizontal="left", vertical="center")
-                        else:
+                        else:  # Price columns
                             cell.alignment = Alignment(horizontal="right", vertical="center")
                             if cell.value is not None and isinstance(cell.value, (int, float)):
                                 cell.number_format = '#,##0.00'
@@ -346,9 +308,10 @@ class EquityIndicesExtractor:
                 worksheet.column_dimensions['C'].width = 30
                 worksheet.column_dimensions['D'].width = 15
                 
+                # Set width for date columns
                 for col_idx in range(5, worksheet.max_column + 1):
                     col_letter = get_column_letter(col_idx)
-                    worksheet.column_dimensions[col_letter].width = 16
+                    worksheet.column_dimensions[col_letter].width = 12
                 
                 worksheet.freeze_panes = 'A2'
             
@@ -364,28 +327,6 @@ class EquityIndicesExtractor:
         """Save extracted data to CSV file."""
         df.to_csv(output_file, index=False)
         print(f"✓ Data saved to {output_file}")
-    
-    def display_summary_by_region(self, df: pd.DataFrame):
-        """Display summary statistics by region."""
-        if df.empty:
-            print("No data to summarize.")
-            return
-        
-        price_col = df.columns[-1]
-        
-        print(f"\n{'='*70}")
-        print(f"SUMMARY BY REGION")
-        print(f"{'='*70}")
-        
-        summary = df.groupby('Region')[price_col].agg([
-            ('Count', 'count'),
-            ('Average', 'mean'),
-            ('Min', 'min'),
-            ('Max', 'max')
-        ]).round(2)
-        
-        print(summary)
-        print(f"{'='*70}\n")
     
     def get_available_regions(self) -> List[str]:
         """Get list of available regions."""
@@ -409,41 +350,44 @@ if __name__ == "__main__":
     print("="*70)
     
     # ============================================================
-    # Extract for 04-Jun-2026 with alternative ticker support
+    # Extract for 01-Jan-2026 to 06-Jun-2026
     # ============================================================
-    target_date = '04-Jun-2026'
+    start_date = '01-Jan-2026'
+    end_date = '06-Jun-2026'
     
-    df = extractor.extract_for_date(target_date, use_alternatives=True)
+    df = extractor.extract_for_date_range(start_date, end_date, use_alternatives=True)
     
     if not df.empty:
-        print("\nEXTRACTED EQUITY INDICES DATA:")
+        print("EXTRACTED EQUITY INDICES DATA:")
         print("-" * 70)
         print(df.to_string(index=False))
-        extractor.display_summary_by_region(df)
-        extractor.save_to_excel(df, f'equity_indices_{target_date.replace("-", "")}.xlsx')
-        extractor.save_to_csv(df, f'equity_indices_{target_date.replace("-", "")}.csv')
+        print()
+        
+        # Save to Excel and CSV
+        extractor.save_to_excel(df, f'equity_indices_{start_date.replace("-", "")}_{end_date.replace("-", "")}.xlsx')
+        extractor.save_to_csv(df, f'equity_indices_{start_date.replace("-", "")}_{end_date.replace("-", "")}.csv')
     else:
-        print("⚠ No data extracted. Running diagnostics on problematic tickers...\n")
-        
-        # Diagnose problematic tickers
-        problematic_tickers = ['000001.SS', '399001.SZ', '^IBEX']
-        date_obj = extractor._parse_date(target_date)
-        date_str = date_obj.strftime('%Y-%m-%d')
-        
-        for ticker in problematic_tickers:
-            extractor.diagnose_ticker(ticker, date_str, date_str)
+        print("⚠ No data extracted.")
     
     # ============================================================
-    # Extract for specific regions
+    # Extract for specific regions only
     # ============================================================
     print("\n" + "="*70)
-    print("EXTRACTING ASIA & EUROPE REGIONS")
+    print("EXTRACTING ASIA & EUROPE REGIONS ONLY")
     print("="*70)
     
-    df_filtered = extractor.extract_for_date(target_date, regions=['Asia', 'Europe'], use_alternatives=True)
+    df_filtered = extractor.extract_for_date_range(
+        start_date,
+        end_date,
+        regions=['Asia', 'Europe'],
+        use_alternatives=True
+    )
     
     if not df_filtered.empty:
-        print("\nFILTERED DATA (Asia & Europe):")
+        print("FILTERED DATA (Asia & Europe):")
         print("-" * 70)
         print(df_filtered.to_string(index=False))
-        extractor.display_summary_by_region(df_filtered)
+        print()
+        
+        # Save filtered data
+        extractor.save_to_excel(df_filtered, f'equity_indices_asia_europe_{start_date.replace("-", "")}_{end_date.replace("-", "")}.xlsx')
