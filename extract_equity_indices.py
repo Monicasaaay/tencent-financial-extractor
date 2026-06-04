@@ -14,47 +14,48 @@ class EquityIndicesExtractor:
     """
     
     # Define indices by region with market and ticker information
+    # NOTE: Some tickers may not have data on yfinance; alternatives are provided
     INDICES_CONFIG = {
         'Asia': [
-            {'market': 'China', 'index_name': 'Shanghai Composite', 'ticker': '000001.SS'},
-            {'market': 'China', 'index_name': 'Shenzhen Component', 'ticker': '399001.SZ'},
-            {'market': 'Hong Kong', 'index_name': 'Hang Seng Index', 'ticker': '^HSI'},
-            {'market': 'Japan', 'index_name': 'Nikkei 225', 'ticker': '^N225'},
-            {'market': 'Singapore', 'index_name': 'Straits Times Index', 'ticker': '^STI'},
-            {'market': 'South Korea', 'index_name': 'KOSPI', 'ticker': '^KS11'},
-            {'market': 'Taiwan', 'index_name': 'Taiwan Weighted', 'ticker': '^TWII'},
-            {'market': 'India', 'index_name': 'BSE SENSEX', 'ticker': '^BSESN'},
-            {'market': 'Thailand', 'index_name': 'SET Index', 'ticker': '^SET.BK'},
+            {'market': 'China', 'index_name': 'Shanghai Composite', 'ticker': '000001.SS', 'alternatives': ['SH000001.SS']},
+            {'market': 'China', 'index_name': 'Shenzhen Component', 'ticker': '399001.SZ', 'alternatives': ['SZ399001.SZ']},
+            {'market': 'Hong Kong', 'index_name': 'Hang Seng Index', 'ticker': '^HSI', 'alternatives': []},
+            {'market': 'Japan', 'index_name': 'Nikkei 225', 'ticker': '^N225', 'alternatives': []},
+            {'market': 'Singapore', 'index_name': 'Straits Times Index', 'ticker': '^STI', 'alternatives': []},
+            {'market': 'South Korea', 'index_name': 'KOSPI', 'ticker': '^KS11', 'alternatives': []},
+            {'market': 'Taiwan', 'index_name': 'Taiwan Weighted', 'ticker': '^TWII', 'alternatives': []},
+            {'market': 'India', 'index_name': 'BSE SENSEX', 'ticker': '^BSESN', 'alternatives': []},
+            {'market': 'Thailand', 'index_name': 'SET Index', 'ticker': '^SET.BK', 'alternatives': []},
         ],
         'Americas': [
-            {'market': 'USA', 'index_name': 'S&P 500', 'ticker': '^GSPC'},
-            {'market': 'USA', 'index_name': 'Nasdaq Composite', 'ticker': '^IXIC'},
-            {'market': 'USA', 'index_name': 'Dow Jones Industrial', 'ticker': '^DJI'},
-            {'market': 'Canada', 'index_name': 'S&P/TSX Composite', 'ticker': '^GSPTSE'},
-            {'market': 'Mexico', 'index_name': 'Mexico IPC', 'ticker': '^MXX'},
-            {'market': 'Brazil', 'index_name': 'Bovespa', 'ticker': '^BVSP'},
-            {'market': 'Argentina', 'index_name': 'MERVAL', 'ticker': '^MERV'},
+            {'market': 'USA', 'index_name': 'S&P 500', 'ticker': '^GSPC', 'alternatives': []},
+            {'market': 'USA', 'index_name': 'Nasdaq Composite', 'ticker': '^IXIC', 'alternatives': []},
+            {'market': 'USA', 'index_name': 'Dow Jones Industrial', 'ticker': '^DJI', 'alternatives': []},
+            {'market': 'Canada', 'index_name': 'S&P/TSX Composite', 'ticker': '^GSPTSE', 'alternatives': []},
+            {'market': 'Mexico', 'index_name': 'Mexico IPC', 'ticker': '^MXX', 'alternatives': []},
+            {'market': 'Brazil', 'index_name': 'Bovespa', 'ticker': '^BVSP', 'alternatives': []},
+            {'market': 'Argentina', 'index_name': 'MERVAL', 'ticker': '^MERV', 'alternatives': []},
         ],
         'Europe': [
-            {'market': 'UK', 'index_name': 'FTSE 100', 'ticker': '^FTSE'},
-            {'market': 'Germany', 'index_name': 'DAX', 'ticker': '^GDAXI'},
-            {'market': 'France', 'index_name': 'CAC 40', 'ticker': '^FCHI'},
-            {'market': 'Spain', 'index_name': 'IBEX 35', 'ticker': '^IBEX'},
-            {'market': 'Italy', 'index_name': 'FTSE MIB', 'ticker': 'FTSEMIB.MI'},
-            {'market': 'Netherlands', 'index_name': 'AEX', 'ticker': '^AEX'},
-            {'market': 'Switzerland', 'index_name': 'SMI', 'ticker': '^SSMI'},
-            {'market': 'Sweden', 'index_name': 'OMX Stockholm 30', 'ticker': '^OMX'},
+            {'market': 'UK', 'index_name': 'FTSE 100', 'ticker': '^FTSE', 'alternatives': []},
+            {'market': 'Germany', 'index_name': 'DAX', 'ticker': '^GDAXI', 'alternatives': []},
+            {'market': 'France', 'index_name': 'CAC 40', 'ticker': '^FCHI', 'alternatives': []},
+            {'market': 'Spain', 'index_name': 'IBEX 35', 'ticker': '^IBEX', 'alternatives': ['IBEX.MC']},
+            {'market': 'Italy', 'index_name': 'FTSE MIB', 'ticker': 'FTSEMIB.MI', 'alternatives': []},
+            {'market': 'Netherlands', 'index_name': 'AEX', 'ticker': '^AEX', 'alternatives': []},
+            {'market': 'Switzerland', 'index_name': 'SMI', 'ticker': '^SSMI', 'alternatives': []},
+            {'market': 'Sweden', 'index_name': 'OMX Stockholm 30', 'ticker': '^OMX', 'alternatives': []},
         ],
         'Middle East': [
-            {'market': 'Saudi Arabia', 'index_name': 'TASI', 'ticker': '^TASI'},
-            {'market': 'UAE', 'index_name': 'DFM General Index', 'ticker': '^DFMGI'},
-            {'market': 'Qatar', 'index_name': 'Qatar Main Index', 'ticker': '^DSM'},
-            {'market': 'Israel', 'index_name': 'TA-125', 'ticker': '^TA125.TA'},
+            {'market': 'Saudi Arabia', 'index_name': 'TASI', 'ticker': '^TASI', 'alternatives': []},
+            {'market': 'UAE', 'index_name': 'DFM General Index', 'ticker': '^DFMGI', 'alternatives': []},
+            {'market': 'Qatar', 'index_name': 'Qatar Main Index', 'ticker': '^DSM', 'alternatives': []},
+            {'market': 'Israel', 'index_name': 'TA-125', 'ticker': '^TA125.TA', 'alternatives': []},
         ],
         'Africa': [
-            {'market': 'South Africa', 'index_name': 'JSE All Share', 'ticker': '^JALSH'},
-            {'market': 'Egypt', 'index_name': 'EGX 30', 'ticker': '^EGX30.CA'},
-            {'market': 'Nigeria', 'index_name': 'NSE All-Share', 'ticker': '^NSEINDX.LG'},
+            {'market': 'South Africa', 'index_name': 'JSE All Share', 'ticker': '^JALSH', 'alternatives': []},
+            {'market': 'Egypt', 'index_name': 'EGX 30', 'ticker': '^EGX30.CA', 'alternatives': []},
+            {'market': 'Nigeria', 'index_name': 'NSE All-Share', 'ticker': '^NSEINDX.LG', 'alternatives': []},
         ],
     }
     
@@ -83,21 +84,23 @@ class EquityIndicesExtractor:
                 print(f"     - Ticker may be delisted")
             else:
                 print(f"   ✓ Success! Got {len(data)} rows")
-                print(f"\n   Data preview:")
+                print(f"   Columns: {list(data.columns)}")
+                print(f"   Data preview:")
                 print(data)
+                print(f"\n   Close values: {data['Close'].values if 'Close' in data.columns else 'N/A'}")
         
         except Exception as e:
             print(f"   ✗ Exception: {type(e).__name__}")
             print(f"   Error message: {str(e)}")
         
-        print(f"\n2. Trying with different date range (wider window)...")
+        print(f"\n2. Trying with wider date range...")
         try:
-            wider_start = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=5)).strftime('%Y-%m-%d')
+            wider_start = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=10)).strftime('%Y-%m-%d')
             data = yf.download(ticker, start=wider_start, end=end_date, progress=False)
             
             if not data.empty:
-                print(f"   ✓ Got data with wider range! Last 5 rows:")
-                print(data.tail())
+                print(f"   ✓ Got data with wider range! Last 10 rows:")
+                print(data.tail(10))
             else:
                 print(f"   ✗ Still no data with wider range")
         except Exception as e:
@@ -105,13 +108,15 @@ class EquityIndicesExtractor:
         
         print(f"\n{'='*70}\n")
     
-    def extract_for_date(self, date_str: str, regions: Optional[List[str]] = None) -> pd.DataFrame:
+    def extract_for_date(self, date_str: str, regions: Optional[List[str]] = None, 
+                        use_alternatives: bool = True) -> pd.DataFrame:
         """
         Extract equity indices close prices for a specific date.
         
         Args:
             date_str: Target date in 'YYYY-MM-DD' or 'DD-MMM-YYYY' format
             regions: List of regions to extract (None = all regions)
+            use_alternatives: If True, try alternative tickers if primary fails
             
         Returns:
             DataFrame with equity indices sorted by region
@@ -125,7 +130,8 @@ class EquityIndicesExtractor:
         print(f"EQUITY INDICES EXTRACTION")
         print(f"{'='*70}")
         print(f"Target date: {date_formatted}")
-        print(f"Column name: {date_column_name}\n")
+        print(f"Column name: {date_column_name}")
+        print(f"Use alternatives for failed tickers: {use_alternatives}\n")
         
         # Determine which regions to process
         regions_to_process = regions if regions else list(self.INDICES_CONFIG.keys())
@@ -151,22 +157,32 @@ class EquityIndicesExtractor:
                 ticker = index_config['ticker']
                 market = index_config['market']
                 index_name = index_config['index_name']
+                alternatives = index_config.get('alternatives', [])
                 
-                # Try to fetch with extended window
+                # Try to fetch with primary ticker
                 close_price = self._fetch_close_price_with_window(ticker, date_formatted)
+                used_ticker = ticker
+                
+                # If primary failed and alternatives available, try alternatives
+                if close_price is None and use_alternatives and alternatives:
+                    for alt_ticker in alternatives:
+                        close_price = self._fetch_close_price_with_window(alt_ticker, date_formatted)
+                        if close_price is not None:
+                            used_ticker = alt_ticker
+                            break
                 
                 if close_price is not None:
                     self.extracted_data.append({
                         'Region': region,
                         'Market': market,
                         'Index Name': index_name,
-                        'Ticker': ticker,
+                        'Ticker': used_ticker,
                         date_column_name: round(close_price, 2)
                     })
-                    status = f"  ✓ {index_name}: {close_price:.2f}"
+                    status = f"  ✓ {index_name}: {close_price:.2f} ({used_ticker})"
                 else:
                     self.failed_tickers.append(ticker)
-                    status = f"  ✗ {index_name}"
+                    status = f"  ✗ {index_name} ({ticker})"
                 
                 print(status)
         
@@ -234,25 +250,36 @@ class EquityIndicesExtractor:
             start = (date_obj - timedelta(days=window_days)).strftime('%Y-%m-%d')
             end = (date_obj + timedelta(days=window_days)).strftime('%Y-%m-%d')
             
-            # Download data - REMOVED 'quiet' parameter
+            # Download data
             data = yf.download(ticker, start=start, end=end, progress=False)
             
             if data.empty:
                 return None
             
+            # Check if 'Close' column exists
+            if 'Close' not in data.columns:
+                return None
+            
             # Try to get the exact date first
             if date_str in data.index.astype(str):
-                return float(data.loc[date_str, 'Close'])
+                close_val = data.loc[date_str, 'Close']
+                # Check if it's a valid number (not NaN)
+                if pd.notna(close_val):
+                    return float(close_val)
             
             # If exact date not available, get the closest trading date before the target
             data_before = data[data.index <= pd.Timestamp(date_str)]
             if not data_before.empty:
-                return float(data_before.iloc[-1]['Close'])
+                close_val = data_before.iloc[-1]['Close']
+                if pd.notna(close_val):
+                    return float(close_val)
             
             # If no data before, get the closest after
             data_after = data[data.index >= pd.Timestamp(date_str)]
             if not data_after.empty:
-                return float(data_after.iloc[0]['Close'])
+                close_val = data_after.iloc[0]['Close']
+                if pd.notna(close_val):
+                    return float(close_val)
             
             return None
         
@@ -262,7 +289,6 @@ class EquityIndicesExtractor:
     def _fetch_close_price(self, ticker: str, date_str: str) -> Optional[float]:
         """Fetch close price for a specific ticker on a specific date."""
         try:
-            # REMOVED 'quiet' parameter
             data = yf.download(ticker, start=date_str, end=date_str, progress=False)
             
             if not data.empty and 'Close' in data.columns:
@@ -383,11 +409,11 @@ if __name__ == "__main__":
     print("="*70)
     
     # ============================================================
-    # Extract for 04-Jun-2026
+    # Extract for 04-Jun-2026 with alternative ticker support
     # ============================================================
     target_date = '04-Jun-2026'
     
-    df = extractor.extract_for_date(target_date)
+    df = extractor.extract_for_date(target_date, use_alternatives=True)
     
     if not df.empty:
         print("\nEXTRACTED EQUITY INDICES DATA:")
@@ -397,14 +423,14 @@ if __name__ == "__main__":
         extractor.save_to_excel(df, f'equity_indices_{target_date.replace("-", "")}.xlsx')
         extractor.save_to_csv(df, f'equity_indices_{target_date.replace("-", "")}.csv')
     else:
-        print("⚠ No data extracted. Running diagnostics on sample tickers...\n")
+        print("⚠ No data extracted. Running diagnostics on problematic tickers...\n")
         
-        # Diagnose a few sample tickers
-        sample_tickers = ['^GSPC', '^FTSE', '^HSI']
+        # Diagnose problematic tickers
+        problematic_tickers = ['000001.SS', '399001.SZ', '^IBEX']
         date_obj = extractor._parse_date(target_date)
         date_str = date_obj.strftime('%Y-%m-%d')
         
-        for ticker in sample_tickers:
+        for ticker in problematic_tickers:
             extractor.diagnose_ticker(ticker, date_str, date_str)
     
     # ============================================================
@@ -414,7 +440,7 @@ if __name__ == "__main__":
     print("EXTRACTING ASIA & EUROPE REGIONS")
     print("="*70)
     
-    df_filtered = extractor.extract_for_date(target_date, regions=['Asia', 'Europe'])
+    df_filtered = extractor.extract_for_date(target_date, regions=['Asia', 'Europe'], use_alternatives=True)
     
     if not df_filtered.empty:
         print("\nFILTERED DATA (Asia & Europe):")
